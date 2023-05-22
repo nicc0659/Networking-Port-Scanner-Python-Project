@@ -1,0 +1,90 @@
+/* Apply a material color scheme to the window */
+QMainWindow {
+    background-color: #FFFFFF;
+}
+
+/* Apply a material color scheme to the buttons */
+QPushButton {
+    background-color: #2196F3;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 3px;
+    padding: 8px 16px;
+}
+
+QPushButton:hover {
+    background-color: #1976D2;
+}
+
+QPushButton:pressed {
+    background-color: #0D47A1;
+}
+
+/* Apply a material color scheme to the progress bar */
+QProgressBar {
+    background-color: #E0E0E0;
+    border: none;
+    height: 8px;
+}
+
+QProgressBar::chunk {
+    background-color: #2196F3;
+}
+
+/* Apply a material color scheme to the text area */
+QTextEdit {
+    background-color: #FAFAFA;
+    color: #000000;
+    font-family: "Roboto", sans-serif;
+}
+
+/* Apply a material color scheme to the scroll bar */
+QScrollBar:vertical {
+    background-color: #F5F5F5;
+    width: 12px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #BBDEFB;
+    border-radius: 6px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    background-color: transparent;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background-color: transparent;
+}
+
+/* Apply a material color scheme to the progress bar text */
+QProgressBar QLabel {
+    color: #2196F3;
+}
+
+/* Apply a material color scheme to the window title */
+QMainWindow::title {
+    padding: 6px;
+    background-color: #2196F3;
+    color: #FFFFFF;
+    font-size: 18px;
+}
+
+/* Apply a material color scheme to the window close button */
+QMainWindow::close-button {
+    background-color: #FF5252;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 3px;
+    padding: 8px;
+}
+
+QMainWindow::close-button:hover {
+    background-color: #FF1744;
+}
+
+QMainWindow::close-button:pressed {
+    background-color: #D50000;
+}
