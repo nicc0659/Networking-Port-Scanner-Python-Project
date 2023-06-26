@@ -25,8 +25,7 @@ def port_scanner(progress):
     start_port = start_port_entry.get()
     end_port = end_port_entry.get()
     ports = f"{start_port}-{end_port}"
-    nm.scan(hosts=target, ports=ports, arguments='-Pn')
-
+    nm.scan(hosts=target, ports=ports, arguments='-sS -Pn')
     for host in nm.all_hosts():
         output_text.insert(tk.END, f"Host: {host} ({nm[host].hostname()})\n")
         output_text.update_idletasks()
@@ -106,7 +105,7 @@ scan_button.grid(column=1, row=3, padx=5 * scale_factor, pady=5 * scale_factor)
 ip_entry = create_label_entry(tab2, "IP Range:", 0)
 
 scan_button = ttk.Button(tab2, text="Scan", command=lambda: threading.Thread(target=network_scanner, args=(progress_bar(tab2),)).start())
-scan_button.grid(column=1, row=1, padx= 5 * scale_factor, pady=5 * scale_factor)
+scan_button.grid(column=1, row=scan_button.grid(column=1, row=1, padx=5 * scale_factor, pady=5 * scale_factor))
 
 # Packet Analyzer tab
 interface_var = tk.StringVar(tab3)

@@ -1,212 +1,175 @@
-import sys 
-from PyQt5.QtWidgets import QApplication, QLabel, QMainWindow, QTextEdit, QLineEdit, QPushButton, QComboBox, QProgressBar, QVBoxLayout, QHBoxLayout, QWidget, QTabWidget
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+import tkinter as tk
+from tkinter import ttk
+import tkinter.font as tkFont
 import nmap
 from scapy.all import ARP, Ether, srp
 import pyshark
 import socket
+import threading
 
-# [likegeeks.com](https://likegeeks.com/pyqt5-tutorial/)
-class PortScannerThread(QThread):
-    progress = pyqtSignal()
-    scanned = pyqtSignal(str)
+# Main GUI window
+window = tk.Tk()
+window.title("Network Tool")
 
-    def __init__(self, target, start_port, end_port):
-        super().__init__()
-        self.target = target
-        self.start_port = start_port
-        self.end_port = end_port
+# Upscale factor
+scale_factor = 2
 
-    def run(self):
-        nm = nmap.PortScanner()
-        ports = f"{self.start_port}-{self.end_port}"
-        nm.scan(hosts=self.target, ports=ports, arguments='-Pn')
+# Create stop events for each thread
+stop_event_port_scan = threading.Event()
+stop_event_network_scan = threading.Event()
+stop_event_packet_analyzer_scan = threading.Event()
 
+capture = None  # Declare capture at a global scope
+
+# Adjust font size for all widgets
+default_font = tkFont.nametofont("TkDefaultFont")
+default_font.configure(size=int(default_font['size'] * scale_factor))
+
+# Port scanner function
+def port_scanner(progress, stop_event):
+    stop_event.clear()  # Reset the stop event at start
+    nm = nmap.PortScanner()
+    target = target_entry.get()
+    start_port = int(start_port_entry.get())
+    end_port = int(end_port_entry.get())
+    for port in range(start_port, end_port + 1):
+        if stop_event.is_set():
+            stop_event.clear()  # Reset the stop event after breaking too
+            break
+        nm.scan(hosts=target, ports=str(port), arguments='-sS -Pn --host-timeout 200ms')
         for host in nm.all_hosts():
-            self.scanned.emit(f"Host: {host} ({nm[host].hostname()})\n")
             for proto in nm[host].all_protocols():
                 lport = nm[host][proto].keys()
                 for port in lport:
-                    self.scanned.emit(f"Port: {port}, State: {nm[host][proto][port]['state']}\n")
+                    port_output_text.insert(tk.END, f"Port: {port}, State: {nm[host][proto][port]['state']}\n")
+                    port_output_text.update_idletasks()
+    progress.stop()
 
-        self.progress.emit()
 
-class NetworkScannerThread(QThread):
-    progress = pyqtSignal()
-    scanned = pyqtSignal(str)
+# Network scanner function
+def network_scanner(progress, stop_event):
+    stop_event.clear()  # Reset the stop event at start
+    ip_range = ip_entry.get()
+    arp_request = ARP(pdst=ip_range)
+    broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
+    arp_request_broadcast = broadcast / arp_request
+    answered, _ = srp(arp_request_broadcast, timeout=1, verbose=True)
 
-    def __init__(self, ip_range):
-        super().__init__()
-        self.ip_range = ip_range
-
-    def run(self):
-        arp_request = ARP(pdst=self.ip_range)
-        broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
-        arp_request_broadcast = broadcast / arp_request
-        answered, _ = srp(arp_request_broadcast, timeout=1, verbose=False)
-
-        for sent, received in answered:
-            self.scanned.emit(f"IP: {received.psrc}, MAC: {received.hwsrc}\n")
-
-        self.progress.emit()
-
-class PacketAnalyzerThread(QThread):
-    progress = pyqtSignal()
-    analyzed = pyqtSignal(str)
-
-    def __init__(self, interface, filter_text):
-        super().__init__()
-        self.interface = interface
-        self.filter_text = filter_text
-
-    def run(self):
-        capture = pyshark.LiveCapture(interface=self.interface, display_filter=self.filter_text)
-        capture.apply_on_packets(lambda packet: self.analyzed.emit(f"{packet}\n"), timeout=10)
-        self.progress.emit()
-
-class NetworkTool(QMainWindow):
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowTitle("Network Tool")
-
-        # Main layout 
-        main_layout = QVBoxLayout()
-
-        # Create tabs
-        self.tab_widget = QTabWidget()
-        self.port_scanner_tab = QWidget()
-        self.network_scanner_tab = QWidget()
-        self.packet_analyzer_tab = QWidget()
-
-        self.tab_widget.addTab(self.port_scanner_tab, "Port Scanner")
-        self.tab_widget.addTab(self.network_scanner_tab, "Network Scanner")
-        self.tab_widget.addTab(self.packet_analyzer_tab, "Packet Analyzer")
-
-        main_layout.addWidget(self.tab_widget)
-
-        # Port Scanner tab
-        self.setup_port_scanner_tab()
-
-        # Network Scanner tab
-        self.setup_network_scanner_tab()   
-
-        # Packet Analyzer tab
-        self.setup_packet_analyzer_tab()
-
-        # Output text 
-        output_label = QLabel("Output:")
-        main_layout.addWidget(output_label)
-        self.output_text = QTextEdit()
-        main_layout.addWidget(self.output_text)
-
-        central_widget = QWidget()
-        central_widget.setLayout(main_layout)
-        self.setCentralWidget(central_widget)
-
-    def setup_port_scanner_tab(self):
-        layout = QVBoxLayout()
+    for sent, received in answered:
+        if stop_event.is_set():
+            stop_event.clear()  # Reset the stop event after breaking too
+            break
+        network_output_text.insert(tk.END, f"IP: {received.psrc}, MAC: {received.hwsrc}\n")
+        network_output_text.update_idletasks()
         
-        target_label = QLabel("Target:")
-        layout.addWidget(target_label)
-        self.target_entry = QLineEdit()
-        layout.addWidget(self.target_entry)
-        
-        start_port_label = QLabel("Start Port:")
-        layout.addWidget(start_port_label) 
-        self.start_port_entry = QLineEdit()
-        layout.addWidget(self.start_port_entry)
-        
-        end_port_label = QLabel("End Port:")
-        layout.addWidget(end_port_label)
-        self.end_port_entry = QLineEdit()
-        layout.addWidget(self.end_port_entry)
+    progress.stop()
 
-        scan_button = QPushButton("Scan")
-        layout.addWidget(scan_button)  
+def packet_analyzer(packet, progress, stop_event):
+    global capture
+    if stop_event.is_set():
+        capture.close()
+        return
+    packet_output_text.insert(tk.END, f"{packet}\n")
+    packet_output_text.update_idletasks()
+    progress.stop()
 
-        progress_label = QLabel("Progress:")  
-        layout.addWidget(progress_label)
-        self.port_scanner_progress = QProgressBar()
-        layout.addWidget(self.port_scanner_progress)
+# Packet analyzer function
+# Packet analyzer function
+def start_packet_analyzer(progress, stop_event):
+    stop_event.clear()  # Reset the stop event at start
+    global capture
+    interface = interface_var.get()
+    filter_text = filter_entry.get()
 
-        scan_button.clicked.connect(self.start_port_scan)
+    capture = pyshark.LiveCapture(interface=interface, display_filter=filter_text)
+    try:
+        for packet in capture.sniff_continuously():
+            if stop_event.is_set():
+                break
+            packet_output_text.insert(tk.END, f"{packet}\n")
+            packet_output_text.update_idletasks()
+    finally:
+        if capture:
+            capture.close()
+    progress.stop() 
 
-        self.port_scanner_tab.setLayout(layout)
-        
-    def setup_network_scanner_tab(self):             
-        layout = QVBoxLayout()          
-        ip_range_label = QLabel("IP Range:")
-        layout.addWidget(ip_range_label)
-        self.ip_entry = QLineEdit()
-        layout.addWidget(self.ip_entry)
-        
-        scan_button = QPushButton("Scan")
-        layout.addWidget(scan_button)  
 
-        progress_label = QLabel("Progress:")  
-        layout.addWidget(progress_label)  
-        self.network_scanner_progress = QProgressBar()
-        layout.addWidget(self.network_scanner_progress)
+# Get available network interfaces
+def get_available_interfaces():
+    return [iface[1] for iface in socket.if_nameindex()]
 
-        scan_button.clicked.connect(self.start_network_scan)
+def create_label_entry(parent, label_text, row):
+    label = ttk.Label(parent, text=label_text)
+    label.grid(column=0, row=row, padx=5 * scale_factor, pady=5 * scale_factor)
+    entry = ttk.Entry(parent, font=default_font)
+    entry.grid(column=1, row=row, padx=5 * scale_factor, pady=5 * scale_factor)
+    return entry
 
-        self.network_scanner_tab.setLayout(layout)
+# Create a progress bar
+def progress_bar(tab):
+    progress = ttk.Progressbar(tab, mode="indeterminate", length=200 * scale_factor)
+    progress.grid(column=1, row=4, padx=5 * scale_factor, pady=5 * scale_factor)
+    progress.start()
+    return progress
 
-    def setup_packet_analyzer_tab(self):
-        layout = QVBoxLayout()  
-        
-        interface_label = QLabel("Interface:")
-        layout.addWidget(interface_label)
-        self.interface_combobox = QComboBox()
-        layout.addWidget(self.interface_combobox)
+# Create tabs
+tab_control = ttk.Notebook(window)
+tab1 = ttk.Frame(tab_control)
+tab2 = ttk.Frame(tab_control)
+tab3 = ttk.Frame(tab_control)
+tab_control.add(tab1, text="Port Scanner")
+tab_control.add(tab2, text="Network Scanner")
+tab_control.add(tab3, text="Packet Analyzer")
+tab_control.pack(expand=1, fill="both")
 
-        filter_label = QLabel("Filter:")
-        layout.addWidget(filter_label) 
-        self.filter_entry = QLineEdit()
-        layout.addWidget(self.filter_entry)
-        
-        analyze_button = QPushButton("Analyze")
-        layout.addWidget(analyze_button)  
+#output_text = tk.Text(window, wrap="word", width=60 * scale_factor, height=20 * scale_factor, font=default_font)
+#output_text.pack(padx=5 * scale_factor, pady=5 * scale_factor)
 
-        progress_label = QLabel("Progress:")  
-        layout.addWidget(progress_label)
-        self.packet_analyzer_progress = QProgressBar()
-        layout.addWidget(self.packet_analyzer_progress)
+# Create output text for each tab
+port_output_text = tk.Text(tab1, wrap="word", width=60 * scale_factor, height=20 * scale_factor, font=default_font)
+port_output_text.grid(column=0, row=5, padx=5 * scale_factor, pady=5 * scale_factor, columnspan=2)
 
-        analyze_button.clicked.connect(self.start_packet_analysis)
+network_output_text = tk.Text(tab2, wrap="word", width=60 * scale_factor, height=20 * scale_factor, font=default_font)
+network_output_text.grid(column=0, row=5, padx=5 * scale_factor, pady=5 * scale_factor, columnspan=2)
 
-        self.packet_analyzer_tab.setLayout(layout)
+packet_output_text = tk.Text(tab3, wrap="word", width=60 * scale_factor, height=20 * scale_factor, font=default_font)
+packet_output_text.grid(column=0, row=5, padx=5 * scale_factor, pady=5 * scale_factor, columnspan=2)
 
-    def start_port_scan(self):
-        target = self.target_entry.text()
-        start_port = int(self.start_port_entry.text())
-        end_port = int(self.end_port_entry.text())
+# Port Scanner tab
+target_entry = create_label_entry(tab1, "Target:", 0)
+start_port_entry = create_label_entry(tab1, "Start Port:", 1)
+end_port_entry = create_label_entry(tab1, "End Port:", 2)
 
-        self.port_scanner_thread = PortScannerThread(target, start_port, end_port)
-        self.port_scanner_thread.scanned.connect(self.output_text.append)
-        self.port_scanner_thread.progress.connect(lambda: self.port_scanner_progress.setValue(50))
-        self.port_scanner_thread.start()
+scan_button_port_scan = ttk.Button(tab1, text="Scan", command=lambda: threading.Thread(target=port_scanner, args=(progress_bar(tab1), stop_event_port_scan)).start())
+scan_button_port_scan.grid(column=1, row=3, padx=5 * scale_factor, pady=5 * scale_factor)
 
-    def start_network_scan(self):
-        ip_range = self.ip_entry.text()
+# Network Scanner tab
+ip_entry = create_label_entry(tab2, "CIDR :", 0)
 
-        self.network_scanner_thread = NetworkScannerThread(ip_range)
-        self.network_scanner_thread.scanned.connect(self.output_text.append)
-        self.network_scanner_thread.progress.connect(lambda: self.network_scanner_progress.setValue(50))
-        self.network_scanner_thread.start()
+scan_button_network_scan = ttk.Button(tab2, text="Scan", command=lambda: threading.Thread(target=network_scanner, args=(progress_bar(tab2), stop_event_network_scan)).start())
+scan_button_network_scan.grid(column=1, row=1, padx=5 * scale_factor, pady=5 * scale_factor)
 
-    def start_packet_analysis(self):
-        interface = self.interface_combobox.currentText()
-        filter_text = self.filter_entry.text()
+# Packet Analyzer tab
+interface_var = tk.StringVar()
+interface_var.set(get_available_interfaces()[0])
+interface_label = ttk.Label(tab3, text="Interface:")
+interface_label.grid(column=0, row=0, padx=5 * scale_factor, pady=5 * scale_factor)
+interface_option_menu = ttk.OptionMenu(tab3, interface_var, *get_available_interfaces())
+interface_option_menu.grid(column=1, row=0, padx=5 * scale_factor, pady=5 * scale_factor)
 
-        self.packet_analyzer_thread = PacketAnalyzerThread(interface, filter_text)
-        self.packet_analyzer_thread.analyzed.connect(self.output_text.append)
-        self.packet_analyzer_thread.progress.connect(lambda: self.packet_analyzer_progress.setValue(50))
-        self.packet_analyzer_thread.start()
+filter_entry = create_label_entry(tab3, "Filter:", 1)
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = NetworkTool()
-    window.show()
-    sys.exit(app.exec_())
+analyze_button_packet_analyzer = ttk.Button(tab3, text="Analyze", command=lambda: threading.Thread(target=start_packet_analyzer, args=(progress_bar(tab3), stop_event_packet_analyzer_scan)).start())
+analyze_button_packet_analyzer.grid(column=1, row=2, padx=5 * scale_factor, pady=5 * scale_factor)
+
+# Add stop buttons
+stop_port_scan_button = ttk.Button(tab1, text="Stop", command= stop_event_port_scan.set)
+stop_port_scan_button.grid(column=0, row=3, padx=5 * scale_factor, pady=5 * scale_factor)
+
+stop_network_scan_button = ttk.Button(tab2, text="Stop", command= stop_event_network_scan.set)
+stop_network_scan_button.grid(column=0, row=1, padx=5 * scale_factor, pady=5 * scale_factor)
+
+stop_packet_analyzer_button = ttk.Button(tab3, text="Stop", command= stop_event_packet_analyzer_scan.set)
+stop_packet_analyzer_button.grid(column=0, row=2, padx=5 * scale_factor, pady=5 * scale_factor)
+
+window.mainloop()
