@@ -64,24 +64,6 @@ def network_scanner(progress, stop_event):
         
     progress.stop()
 
-# Packet analyzer function updated to use BPF filter
-def start_packet_analyzer(progress, stop_event):
-    stop_event.clear()  # Reset the stop event at start
-    global capture
-    interface = interface_var.get()
-    filter_text = filter_var.get()  # Fetch filter from the dropdown
-
-    capture = pyshark.LiveCapture(interface=interface, bpf_filter=filter_text)  # Using bpf_filter
-    try:
-        for packet in capture.sniff_continuously():
-            if stop_event.is_set():
-                break
-            packet_output_text.insert(tk.END, f"{packet}\n")
-            packet_output_text.update_idletasks()
-    finally:
-        if capture:
-            capture.clear
-# Packet analyzer function
 # Packet analyzer function updated for frequent stop event checks
 def start_packet_analyzer(progress, stop_event):
     stop_event.clear()  # Reset the stop event at start
