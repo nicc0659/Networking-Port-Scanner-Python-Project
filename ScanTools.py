@@ -9,7 +9,7 @@ import threading
 
 # Main GUI window
 window = tk.Tk()
-window.title("Network Tool")
+window.title("Network & Port Scanning Tool")
 
 # Upscale factor
 scale_factor = 2
@@ -64,24 +64,14 @@ def network_scanner(progress, stop_event):
         
     progress.stop()
 
-def packet_analyzer(packet, progress, stop_event):
-    global capture
-    if stop_event.is_set():
-        capture.close()
-        return
-    packet_output_text.insert(tk.END, f"{packet}\n")
-    packet_output_text.update_idletasks()
-    progress.stop()
-
-# Packet analyzer function
-# Packet analyzer function
+# Packet analyzer function updated to use BPF filter
 def start_packet_analyzer(progress, stop_event):
     stop_event.clear()  # Reset the stop event at start
     global capture
     interface = interface_var.get()
-    filter_text = filter_entry.get()
+    filter_text = filter_var.get()  # Fetch filter from the dropdown
 
-    capture = pyshark.LiveCapture(interface=interface, display_filter=filter_text)
+    capture = pyshark.LiveCapture(interface=interface, bpf_filter=filter_text)  # Using bpf_filter
     try:
         for packet in capture.sniff_continuously():
             if stop_event.is_set():
@@ -90,8 +80,35 @@ def start_packet_analyzer(progress, stop_event):
             packet_output_text.update_idletasks()
     finally:
         if capture:
+            capture.clear
+# Packet analyzer function
+# Packet analyzer function updated for frequent stop event checks
+def start_packet_analyzer(progress, stop_event):
+    stop_event.clear()  # Reset the stop event at start
+    global capture
+    interface = interface_var.get()
+    filter_text = filter_var.get()  # Fetch filter from the dropdown
+
+    packets = []  # To store captured packets
+    capture = pyshark.LiveCapture(interface=interface, bpf_filter=filter_text)  # Using bpf_filter
+    capture_thread = threading.Thread(target=lambda: packets.extend(capture.sniff_continuously()))
+    capture_thread.start()
+
+    try:
+        while capture_thread.is_alive():
+            # Check stop event, break loop if stop event is set
+            if stop_event.is_set():
+                break
+            # Insert captured packets to output text
+            while packets:
+                packet = packets.pop(0)
+                packet_output_text.insert(tk.END, f"{packet}\n")
+                packet_output_text.update_idletasks()
+    finally:
+        stop_event.clear()
+        if capture:
             capture.close()
-    progress.stop() 
+        progress.stop()
 
 
 # Get available network interfaces
@@ -125,6 +142,18 @@ tab_control.pack(expand=1, fill="both")
 #output_text = tk.Text(window, wrap="word", width=60 * scale_factor, height=20 * scale_factor, font=default_font)
 #output_text.pack(padx=5 * scale_factor, pady=5 * scale_factor)
 
+# List of BPF filters for protocols
+protocols = ['tcp', 'udp', 'arp', 'icmp', 'dns']
+# Variable to hold the selected protocol
+filter_var = tk.StringVar()
+filter_var.set(protocols[0])  # Default value
+
+# Create Protocol Dropdown replacing Filter text entry
+filter_label = ttk.Label(tab3, text="Protocol:")
+filter_label.grid(column=0, row=1, padx=5 * scale_factor, pady=5 * scale_factor)
+filter_option_menu = ttk.OptionMenu(tab3, filter_var, *protocols)
+filter_option_menu.grid(column=1, row=1, padx=5 * scale_factor, pady=5 * scale_factor)
+
 # Create output text for each tab
 port_output_text = tk.Text(tab1, wrap="word", width=60 * scale_factor, height=20 * scale_factor, font=default_font)
 port_output_text.grid(column=0, row=5, padx=5 * scale_factor, pady=5 * scale_factor, columnspan=2)
@@ -157,10 +186,11 @@ interface_label.grid(column=0, row=0, padx=5 * scale_factor, pady=5 * scale_fact
 interface_option_menu = ttk.OptionMenu(tab3, interface_var, *get_available_interfaces())
 interface_option_menu.grid(column=1, row=0, padx=5 * scale_factor, pady=5 * scale_factor)
 
-filter_entry = create_label_entry(tab3, "Filter:", 1)
+filter_entry = create_label_entry(tab3, "Filter:", 2)
+filter_entry.grid(column=1, row=2, padx=5 * scale_factor, pady=5 * scale_factor)
 
 analyze_button_packet_analyzer = ttk.Button(tab3, text="Analyze", command=lambda: threading.Thread(target=start_packet_analyzer, args=(progress_bar(tab3), stop_event_packet_analyzer_scan)).start())
-analyze_button_packet_analyzer.grid(column=1, row=2, padx=5 * scale_factor, pady=5 * scale_factor)
+analyze_button_packet_analyzer.grid(column=1, row=3, padx=5 * scale_factor, pady=5 * scale_factor)
 
 # Add stop buttons
 stop_port_scan_button = ttk.Button(tab1, text="Stop", command= stop_event_port_scan.set)
@@ -170,6 +200,6 @@ stop_network_scan_button = ttk.Button(tab2, text="Stop", command= stop_event_net
 stop_network_scan_button.grid(column=0, row=1, padx=5 * scale_factor, pady=5 * scale_factor)
 
 stop_packet_analyzer_button = ttk.Button(tab3, text="Stop", command= stop_event_packet_analyzer_scan.set)
-stop_packet_analyzer_button.grid(column=0, row=2, padx=5 * scale_factor, pady=5 * scale_factor)
+stop_packet_analyzer_button.grid(column=0, row=3, padx=5 * scale_factor, pady=5 * scale_factor)
 
 window.mainloop()
