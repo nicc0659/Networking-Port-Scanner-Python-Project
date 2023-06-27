@@ -64,21 +64,20 @@ def network_scanner(progress, stop_event):
         
     progress.stop()
 
-# Packet analyzer function updated for frequent stop event checks
 def start_packet_analyzer(progress, stop_event):
     stop_event.clear()  # Reset the stop event at start
     global capture
     interface = interface_var.get()
-    filter_text = filter_var.get()  # Fetch filter from the dropdown
+    filter_text = filter_entry.get().strip()  # Fetch filter from the Entry
 
-    packets = []  # To store captured packets
     capture = pyshark.LiveCapture(interface=interface, bpf_filter=filter_text)  # Using bpf_filter
+    packets = []  # To store captured packets
     capture_thread = threading.Thread(target=lambda: packets.extend(capture.sniff_continuously()))
     capture_thread.start()
 
     try:
         while capture_thread.is_alive():
-            # Check stop event, break loop if stop event is set
+            # Check stop event, break the loop if the stop event is set
             if stop_event.is_set():
                 break
             # Insert captured packets to output text
