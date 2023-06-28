@@ -69,8 +69,10 @@ def start_packet_analyzer(progress, stop_event):
     global capture
     interface = interface_var.get()
     filter_text = filter_entry.get().strip()  # Fetch filter from the Entry
+    dropdown_protocol = filter_var.get()  # Fetch selected protocol from the dropdown
+    bpf_filter = filter_text or dropdown_protocol  # If filter_text has value use it, else use dropdown_protocol
 
-    capture = pyshark.LiveCapture(interface=interface, bpf_filter=filter_text)  # Using bpf_filter
+    capture = pyshark.LiveCapture(interface=interface, bpf_filter=bpf_filter)
     packets = []  # To store captured packets
     capture_thread = threading.Thread(target=lambda: packets.extend(capture.sniff_continuously()))
     capture_thread.start()
